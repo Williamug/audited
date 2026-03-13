@@ -1,0 +1,48 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('{{ table }}', function (Blueprint $table) {
+            $table->id();
+
+            // User snapshot — stored so the log remains readable even after
+            // the user record is modified or deleted. No foreign key constraint
+            // is intentional: audit history must survive user deletion.
+            $table->unsignedBigInteger('user_id')->nullable()->index();
+            $table->string('user_name')->nullable();
+            $table->string('user_level')->nullable();
+
+            // 'web' or 'mobile' (API requests that expect JSON).
+            $table->string('platform', 20);
+
+            // What happened and in which area of the application.
+            $table->string('action', 50)->index();
+            $table->string('module', 80)->index();
+            $table->text('description');
+
+            // Before/after snapshots for change tracking.
+            $table->json('old_values')->nullable();
+            $table->json('new_values')->nullable();
+
+            // Request context for security auditing.
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+
+            // Audit logs are append-only — created_at is indexed for pruning
+            // and date-range queries. updated_at is kept for ORM compatibility.
+            $table->timestamp('created_at')->useCurrent()->index();
+            $table->timestamp('updated_at')->nullable();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('{{ table }}');
+    }
+};

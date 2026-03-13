@@ -1,8 +1,8 @@
 # Audited
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/williamug/audited.svg?style=flat-square)](https://packagist.org/packages/williamug/audited)
-[![tests](https://github.com/williamug/audited/actions/workflows/run-tests.yml/badge.svg)](https://github.com/williamug/audited/actions/workflows/run-tests.yml)
-[![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/williamug/audited/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/williamug/audited/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
+[![tests](https://github.com/Williamug/audited/actions/workflows/tests.yml/badge.svg)](https://github.com/Williamug/audited/actions/workflows/tests.yml)
+[![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/Williamug/audited/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/Williamug/audited/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/williamug/audited.svg?style=flat-square)](https://packagist.org/packages/williamug/audited)
 
 

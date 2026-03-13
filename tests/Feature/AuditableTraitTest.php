@@ -1,96 +1,81 @@
 <?php
 
-namespace Williamug\Audited\Tests\Feature;
-
 use Williamug\Audited\Models\AuditLog;
 use Williamug\Audited\Tests\Fixtures\TestProduct;
 use Williamug\Audited\Tests\Fixtures\TestProductWithLabel;
-use Williamug\Audited\Tests\TestCase;
 
-class AuditableTraitTest extends TestCase
-{
-    public function test_creating_a_model_writes_a_log_entry(): void
-    {
-        TestProduct::create(['name' => 'Widget A', 'price' => 100]);
+test('creating a model writes a log entry', function () {
+    TestProduct::create(['name' => 'Widget A', 'price' => 100]);
 
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => 'create',
-            'module' => 'Products',
-        ]);
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'create',
+        'module' => 'Products',
+    ]);
 
-        $log = AuditLog::first();
-        $this->assertArrayHasKey('name', $log->new_values);
-        $this->assertNull($log->old_values);
-    }
+    $log = AuditLog::first();
+    expect($log->new_values)->toHaveKey('name')
+        ->and($log->old_values)->toBeNull();
+});
 
-    public function test_updating_a_model_writes_a_log_entry_with_only_changed_fields(): void
-    {
-        $product = TestProduct::create(['name' => 'Widget A', 'price' => 100]);
-        AuditLog::query()->delete(); // clear creation log
+test('updating a model writes a log entry with only changed fields', function () {
+    $product = TestProduct::create(['name' => 'Widget A', 'price' => 100]);
+    AuditLog::query()->delete();
 
-        $product->update(['price' => 200]);
+    $product->update(['price' => 200]);
 
-        $this->assertDatabaseCount('audit_logs', 1);
+    $this->assertDatabaseCount('audit_logs', 1);
 
-        $log = AuditLog::first();
-        $this->assertEquals('update', $log->action);
-        $this->assertEquals(['price' => 100], $log->old_values);
-        $this->assertEquals(['price' => 200], $log->new_values);
-        $this->assertArrayNotHasKey('name', $log->new_values);
-    }
+    $log = AuditLog::first();
+    expect($log->action)->toBe('update')
+        ->and($log->old_values)->toBe(['price' => 100])
+        ->and($log->new_values)->toBe(['price' => 200])
+        ->and($log->new_values)->not->toHaveKey('name');
+});
 
-    public function test_updating_without_changes_does_not_write_a_log(): void
-    {
-        $product = TestProduct::create(['name' => 'Widget A', 'price' => 100]);
-        AuditLog::query()->delete();
+test('updating without changes does not write a log', function () {
+    $product = TestProduct::create(['name' => 'Widget A', 'price' => 100]);
+    AuditLog::query()->delete();
 
-        $product->save(); // no fields changed
+    $product->save();
 
-        $this->assertDatabaseCount('audit_logs', 0);
-    }
+    $this->assertDatabaseCount('audit_logs', 0);
+});
 
-    public function test_deleting_a_model_writes_a_log_entry(): void
-    {
-        $product = TestProduct::create(['name' => 'Widget A', 'price' => 100]);
-        AuditLog::query()->delete();
+test('deleting a model writes a log entry', function () {
+    $product = TestProduct::create(['name' => 'Widget A', 'price' => 100]);
+    AuditLog::query()->delete();
 
-        $product->delete();
+    $product->delete();
 
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => 'delete',
-            'module' => 'Products',
-        ]);
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'delete',
+        'module' => 'Products',
+    ]);
 
-        $log = AuditLog::first();
-        $this->assertArrayHasKey('name', $log->old_values);
-        $this->assertNull($log->new_values);
-    }
+    $log = AuditLog::first();
+    expect($log->old_values)->toHaveKey('name')
+        ->and($log->new_values)->toBeNull();
+});
 
-    public function test_audit_label_method_is_used_in_description(): void
-    {
-        TestProductWithLabel::create(['name' => 'Widget A', 'price' => 100]);
+test('audit label method is used in description', function () {
+    TestProductWithLabel::create(['name' => 'Widget A', 'price' => 100]);
 
-        $this->assertDatabaseHas('audit_logs', [
-            'description' => 'Created Product: Widget A',
-        ]);
-    }
+    $this->assertDatabaseHas('audit_logs', [
+        'description' => 'Created Product: Widget A',
+    ]);
+});
 
-    public function test_audit_module_defaults_to_class_basename(): void
-    {
-        // TestProduct has $auditModule = 'Products' but we test the fallback
-        // by checking TestProduct uses the explicit one correctly.
-        TestProduct::create(['name' => 'Widget A', 'price' => 50]);
+test('audit module defaults to class basename', function () {
+    TestProduct::create(['name' => 'Widget A', 'price' => 50]);
 
-        $this->assertDatabaseHas('audit_logs', ['module' => 'Products']);
-    }
+    $this->assertDatabaseHas('audit_logs', ['module' => 'Products']);
+});
 
-    public function test_audit_exclude_strips_specified_fields(): void
-    {
-        // TestProductWithLabel has $auditExclude = ['stock_count']
-        TestProductWithLabel::create(['name' => 'Widget A', 'price' => 100, 'stock_count' => 50]);
+test('audit exclude strips specified fields', function () {
+    TestProductWithLabel::create(['name' => 'Widget A', 'price' => 100, 'stock_count' => 50]);
 
-        $log = AuditLog::first();
-        $this->assertArrayNotHasKey('stock_count', $log->new_values);
-        $this->assertArrayHasKey('name', $log->new_values);
-    }
-}
+    $log = AuditLog::first();
+    expect($log->new_values)
+        ->not->toHaveKey('stock_count')
+        ->toHaveKey('name');
+});

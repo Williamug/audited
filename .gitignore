@@ -1,0 +1,28 @@
+/vendor/
+/node_modules/
+
+# Composer
+composer.phar
+composer.lock
+
+# PHPUnit
+.phpunit.result.cache
+.phpunit.cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Laravel
+.env
+.env.*
+!.env.example
+storage/
+bootstrap/cache/
+
+# Logs
+*.log

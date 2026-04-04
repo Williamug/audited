@@ -45,7 +45,7 @@ A simple, robust audit logging package for Laravel applications. Drop one trait 
 | Dependency | Version |
 |---|---|
 | PHP | `^8.2` |
-| Laravel | `^10.0`, `^11.0`, or `^12.0` |
+| Laravel | `^10.0`, `^11.0`, `^12.0`, `^13.0` |
 
 ---
 

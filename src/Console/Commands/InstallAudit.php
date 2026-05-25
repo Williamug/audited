@@ -41,6 +41,13 @@ class InstallAudit extends Command
 
     private function publishMigration(): void
     {
+        $existing = glob(database_path('migrations/*_create_audit_logs_table.php'));
+
+        if (! empty($existing)) {
+            $this->line('  <fg=yellow>~</> Migration already exists — skipped.');
+            return;
+        }
+
         $stub = File::get(__DIR__ . '/../../../database/migrations/create_audit_logs_table.php.stub');
         $stub = str_replace('{{ table }}', config('audit.table', 'audit_logs'), $stub);
 

@@ -39,7 +39,10 @@
   "autoload": {
     "psr-4": {
       "Williamug\\Audited\\": "src/"
-    }
+    },
+    "files": [
+      "src/helpers.php"
+    ]
   },
   "autoload-dev": {
     "psr-4": {
@@ -50,8 +53,14 @@
     "laravel": {
       "providers": [
         "Williamug\\Audited\\AuditServiceProvider"
-      ]
+      ],
+      "aliases": {
+        "Audited": "Williamug\\Audited\\Facades\\Audited"
+      }
     }
+  },
+  "suggest": {
+    "livewire/livewire": "^3.0|^4.0 — Required for the <livewire:audited::timeline> component with live pagination"
   },
   "minimum-stability": "stable",
   "prefer-stable": true

@@ -15,6 +15,8 @@ enum AuditAction: string
     case Reject = 'reject';
     case Export = 'export';
     case ViewReport = 'view_report';
+    case Restore = 'restore';
+    case ForceDelete = 'force_delete';
 
     /**
      * Human-readable label for display in UI.
@@ -33,6 +35,8 @@ enum AuditAction: string
             self::Reject => 'Reject',
             self::Export => 'Export',
             self::ViewReport => 'View Report',
+            self::Restore => 'Restore',
+            self::ForceDelete => 'Force Delete',
         };
     }
 
@@ -53,6 +57,8 @@ enum AuditAction: string
             self::Reject => 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
             self::Export => 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
             self::ViewReport => 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+            self::Restore => 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+            self::ForceDelete => 'bg-red-200 text-red-800 dark:bg-red-900/50 dark:text-red-300',
         };
     }
 }

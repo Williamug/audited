@@ -50,6 +50,35 @@ class AuditLog extends Model
   }
 
     // -------------------------------------------------------------------------
+    // Accessors (used by Blade / Livewire timeline views)
+    // -------------------------------------------------------------------------
+
+  /**
+   * Human-readable label for the action value.
+   * Uses AuditAction enum labels when the value matches; otherwise title-cases
+   * the raw string so custom actions like 'bulk_import' become 'Bulk Import'.
+   */
+  public function getActionLabelAttribute(): string
+  {
+    $enum = AuditAction::tryFrom($this->action);
+
+    return $enum ? $enum->label() : ucwords(str_replace('_', ' ', $this->action));
+  }
+
+  /**
+   * Tailwind CSS badge classes for the action value.
+   * Falls back to a neutral gray when the action is not a known AuditAction.
+   */
+  public function getActionBadgeColorAttribute(): string
+  {
+    $enum = AuditAction::tryFrom($this->action);
+
+    return $enum
+      ? $enum->badgeColor()
+      : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+  }
+
+    // -------------------------------------------------------------------------
     // Relationships
     // -------------------------------------------------------------------------
 

@@ -3,6 +3,7 @@
 use Williamug\Audited\Models\AuditLog;
 use Williamug\Audited\Tests\Fixtures\TestProduct;
 use Williamug\Audited\Tests\Fixtures\TestProductWithLabel;
+use Williamug\Audited\Tests\Fixtures\TestSoftDeleteProduct;
 
 test('creating a model writes a log entry', function () {
     TestProduct::create(['name' => 'Widget A', 'price' => 100]);
@@ -78,4 +79,49 @@ test('audit exclude strips specified fields', function () {
     expect($log->new_values)
         ->not->toHaveKey('stock_count')
         ->toHaveKey('name');
+});
+
+test('soft deleting a model writes a delete log entry', function () {
+    $product = TestSoftDeleteProduct::create(['name' => 'Widget A', 'price' => 100]);
+    AuditLog::query()->delete();
+
+    $product->delete();
+
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'delete',
+        'module' => 'Products',
+    ]);
+    $this->assertDatabaseCount('audit_logs', 1);
+});
+
+test('restoring a soft-deleted model writes a restore log entry', function () {
+    $product = TestSoftDeleteProduct::create(['name' => 'Widget A', 'price' => 100]);
+    $product->delete();
+    AuditLog::query()->delete();
+
+    $product->restore();
+
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'restore',
+        'module' => 'Products',
+    ]);
+    $log = AuditLog::first();
+    expect($log->new_values)->toHaveKey('name')
+        ->and($log->old_values)->toBeNull();
+});
+
+test('force deleting a model writes a force_delete log entry', function () {
+    $product = TestSoftDeleteProduct::create(['name' => 'Widget A', 'price' => 100]);
+    $product->delete();
+    AuditLog::query()->delete();
+
+    $product->forceDelete();
+
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'force_delete',
+        'module' => 'Products',
+    ]);
+    $log = AuditLog::first();
+    expect($log->old_values)->toHaveKey('name')
+        ->and($log->new_values)->toBeNull();
 });

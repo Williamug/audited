@@ -104,3 +104,57 @@ test('log reads user name from configured field', function () {
         'user_name' => 'jane@example.com',
     ]);
 });
+
+test('log records cli platform when running in console', function () {
+    // Orchestra Testbench runs in console context, so platform should be 'cli'.
+    ActivityLogService::log(AuditAction::Export, 'Reports', 'Exported via command');
+
+    $this->assertDatabaseHas('audit_logs', [
+        'platform' => 'cli',
+    ]);
+});
+
+test('url http_method and route_name are null in cli context', function () {
+    ActivityLogService::log(AuditAction::Create, 'Products', 'Created widget');
+
+    $log = AuditLog::first();
+
+    expect($log->url)->toBeNull()
+        ->and($log->http_method)->toBeNull()
+        ->and($log->route_name)->toBeNull();
+});
+
+test('auth guard is captured when user is authenticated', function () {
+    $user = TestUser::create(['name' => 'Jane', 'email' => 'jane@example.com', 'password' => 'secret']);
+    $this->actingAs($user);
+
+    ActivityLogService::log(AuditAction::Create, 'Products', 'Created widget');
+
+    $log = AuditLog::first();
+    expect($log->auth_guard)->toBe('web');
+});
+
+test('auth guard is null when no user is authenticated', function () {
+    ActivityLogService::log(AuditAction::FailedLogin, 'Authentication', 'Failed login');
+
+    $log = AuditLog::first();
+    expect($log->auth_guard)->toBeNull();
+});
+
+test('tags are stored and cast to array', function () {
+    ActivityLogService::log(
+        AuditAction::Export,
+        'Reports',
+        'Exported quarterly report',
+        tags: ['format' => 'csv', 'rows' => 1500],
+    );
+
+    $log = AuditLog::first();
+    expect($log->tags)->toBe(['format' => 'csv', 'rows' => 1500]);
+});
+
+test('tags default to null when not provided', function () {
+    ActivityLogService::log(AuditAction::Create, 'Products', 'Created widget');
+
+    expect(AuditLog::first()->tags)->toBeNull();
+});

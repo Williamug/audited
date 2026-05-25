@@ -26,6 +26,10 @@ return new class extends Migration
             $table->string('module', 80)->index();
             $table->text('description');
 
+            // Optional key-value metadata attached to the log entry at call time
+            // (e.g. batch IDs, import sources, workflow step names).
+            $table->json('tags')->nullable();
+
             // Before/after snapshots for change tracking.
             $table->json('old_values')->nullable();
             $table->json('new_values')->nullable();
@@ -33,6 +37,20 @@ return new class extends Migration
             // Request context for security auditing.
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
+            $table->string('url', 2048)->nullable();
+            $table->string('http_method', 10)->nullable();
+            $table->string('route_name', 255)->nullable()->index();
+            $table->string('auth_guard', 50)->nullable();
+
+            // Polymorphic link to the Eloquent model that was acted on.
+            // Enables $model->auditLogs() and AuditLog::forSubject($model) queries.
+            $table->string('subject_type', 255)->nullable();
+            $table->unsignedBigInteger('subject_id')->nullable();
+            $table->index(['subject_type', 'subject_id']);
+
+            // Groups all log entries written during the same HTTP request or
+            // console command invocation. Useful for request-level tracing.
+            $table->string('request_id', 36)->nullable()->index();
 
             // Audit logs are append-only — created_at is indexed for pruning
             // and date-range queries. updated_at is kept for ORM compatibility.

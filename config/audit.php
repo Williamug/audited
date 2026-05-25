@@ -98,4 +98,26 @@ return [
     */
     'table' => 'audit_logs',
 
+    /*
+    |--------------------------------------------------------------------------
+    | Queue
+    |--------------------------------------------------------------------------
+    | Set to false (default) to write audit logs synchronously.
+    | Set to true to dispatch on the default queue.
+    | Set to a queue name string (e.g. 'audit') to use a specific queue.
+    |
+    | Async logging avoids adding latency to requests in high-traffic apps.
+    */
+    'queue' => env('AUDIT_QUEUE', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Silent Failures
+    |--------------------------------------------------------------------------
+    | When true, exceptions thrown during a log write are swallowed and sent
+    | to Laravel's logger instead of bubbling up to the caller. Useful in
+    | production to ensure audit logging never breaks application features.
+    */
+    'silent_failures' => env('AUDIT_SILENT_FAILURES', false),
+
 ];

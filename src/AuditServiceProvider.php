@@ -8,6 +8,7 @@ use Illuminate\Auth\Events\Logout;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Williamug\Audited\Console\Commands\InstallAudit;
 use Williamug\Audited\Console\Commands\PruneAuditLogs;
 use Williamug\Audited\Listeners\LogAuthEvents;
@@ -30,6 +31,7 @@ class AuditServiceProvider extends ServiceProvider
         $this->registerCommands();
         $this->registerAuthListener();
         $this->registerSchedule();
+        $this->registerRequestId();
     }
 
     private function registerPublishables(): void
@@ -62,12 +64,20 @@ class AuditServiceProvider extends ServiceProvider
 
     private function registerSchedule(): void
     {
-        if (! config('audit.prune_after_months')) {
+        if (config('audit.prune_after_months') === null) {
             return;
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command('audit:prune')->quarterly();
         });
+    }
+
+    private function registerRequestId(): void
+    {
+        // Resolved once per request (or once per console command). Every log
+        // entry written during the same invocation shares this UUID so that
+        // request-level tracing is possible in the audit log.
+        $this->app->scoped('audit.request_id', fn () => (string) Str::uuid());
     }
 }

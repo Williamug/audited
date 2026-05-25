@@ -53,6 +53,7 @@ abstract class TestCase extends Orchestra
             $table->unsignedInteger('price')->default(0);
             $table->unsignedInteger('stock_count')->default(0);
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('audit_logs', function (Blueprint $table) {
@@ -66,8 +67,17 @@ abstract class TestCase extends Orchestra
             $table->text('description');
             $table->json('old_values')->nullable();
             $table->json('new_values')->nullable();
+            $table->json('tags')->nullable();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
+            $table->string('url', 2048)->nullable();
+            $table->string('http_method', 10)->nullable();
+            $table->string('route_name', 255)->nullable()->index();
+            $table->string('auth_guard', 50)->nullable();
+            $table->string('subject_type', 255)->nullable();
+            $table->unsignedBigInteger('subject_id')->nullable();
+            $table->index(['subject_type', 'subject_id']);
+            $table->string('request_id', 36)->nullable()->index();
             $table->timestamp('created_at')->useCurrent()->index();
             $table->timestamp('updated_at')->nullable();
         });

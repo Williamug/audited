@@ -6,23 +6,28 @@ use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Williamug\Audited\AuditManager;
 use Williamug\Audited\Console\Commands\InstallAudit;
 use Williamug\Audited\Console\Commands\PruneAuditLogs;
 use Williamug\Audited\Listeners\LogAuthEvents;
+use Williamug\Audited\Livewire\AuditLogTable;
+use Williamug\Audited\Livewire\AuditTimeline;
+use Williamug\Audited\View\Components\Timeline;
 
 class AuditServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Merge package defaults first so any key not published by the consuming
-        // app still has a sensible fallback from the package's own config file.
         $this->mergeConfigFrom(
             __DIR__ . '/../config/audit.php',
             'audit',
         );
+
+        $this->app->singleton('audited', fn () => new AuditManager());
     }
 
     public function boot(): void
@@ -32,6 +37,8 @@ class AuditServiceProvider extends ServiceProvider
         $this->registerAuthListener();
         $this->registerSchedule();
         $this->registerRequestId();
+        $this->registerViews();
+        $this->registerLivewireComponents();
     }
 
     private function registerPublishables(): void
@@ -79,5 +86,26 @@ class AuditServiceProvider extends ServiceProvider
         // entry written during the same invocation shares this UUID so that
         // request-level tracing is possible in the audit log.
         $this->app->scoped('audit.request_id', fn () => (string) Str::uuid());
+    }
+
+    private function registerViews(): void
+    {
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'audited');
+
+        $this->publishes([
+            __DIR__ . '/../resources/views' => resource_path('views/vendor/audited'),
+        ], 'audited-views');
+
+        Blade::componentNamespace('Williamug\\Audited\\View\\Components', 'audited');
+    }
+
+    private function registerLivewireComponents(): void
+    {
+        if (! class_exists(\Livewire\Livewire::class)) {
+            return;
+        }
+
+        \Livewire\Livewire::component('audited::timeline', AuditTimeline::class);
+        \Livewire\Livewire::component('audited::log-table', AuditLogTable::class);
     }
 }

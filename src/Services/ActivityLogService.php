@@ -5,6 +5,7 @@ namespace Williamug\Audited\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Request;
 use Williamug\Audited\Enums\AuditAction;
+use Williamug\Audited\Jobs\WriteAuditLog;
 
 class ActivityLogService
 {
@@ -17,17 +18,17 @@ class ActivityLogService
      * @param  string                    $description Human-readable summary of what happened.
      * @param  array<string,mixed>|null  $oldValues   State before the change.
      * @param  array<string,mixed>|null  $newValues   State after the change.
-     */
-    /**
-     * @param  AuditAction|string        $action
-     * @param  string                    $module
-     * @param  string                    $description
-     * @param  array<string,mixed>|null  $oldValues
-     * @param  array<string,mixed>|null  $newValues
      * @param  object|null               $actingUser  Explicit user to record. Defaults to
-     *                                                 auth()->user(). Pass this when logging
-     *                                                 auth events where the session user is
-     *                                                 not yet set (e.g. Login event).
+     *                                                auth()->user(). Pass this when logging
+     *                                                auth events where the session user is
+     *                                                not yet set (e.g. Login event).
+     * @param  Model|null                $subject     The Eloquent model being acted on.
+     *                                                Populated automatically by the Auditable
+     *                                                trait; pass explicitly for manual logs
+     *                                                tied to a specific record.
+     * @param  array<string,mixed>|null  $tags        Arbitrary key-value metadata to attach
+     *                                                to the log entry (e.g. batch IDs, import
+     *                                                sources, workflow step names).
      */
     public static function log(
         AuditAction|string $action,
@@ -36,24 +37,36 @@ class ActivityLogService
         ?array $oldValues = null,
         ?array $newValues = null,
         ?object $actingUser = null,
+        ?Model $subject = null,
+        ?array $tags = null,
     ): void {
         $user = $actingUser ?? auth()->user();
         $modelClass = config('audit.model');
 
-        $modelClass::create([
-            'user_id'     => $user?->getKey(),
-            'user_name'   => self::resolveUserName($user),
-            'user_level'  => self::resolveUserLevel($user),
-            'platform'    => self::detectPlatform(),
-            'action'      => $action instanceof AuditAction ? $action->value : $action,
-            'module'      => $module,
-            'description' => $description,
-            'old_values'  => $oldValues ? self::sanitize($oldValues) : null,
-            'new_values'  => $newValues ? self::sanitize($newValues) : null,
-            'ip_address'  => Request::ip(),
-            'user_agent'  => Request::userAgent(),
+        $data = [
+            'user_id'      => $user?->getKey(),
+            'user_name'    => self::resolveUserName($user),
+            'user_level'   => self::resolveUserLevel($user),
+            'platform'     => self::detectPlatform(),
+            'action'       => $action instanceof AuditAction ? $action->value : $action,
+            'module'       => $module,
+            'description'  => $description,
+            'tags'         => $tags,
+            'old_values'   => $oldValues ? self::sanitize($oldValues) : null,
+            'new_values'   => $newValues ? self::sanitize($newValues) : null,
+            'ip_address'   => Request::ip(),
+            'user_agent'   => Request::userAgent(),
+            'url'          => self::resolveUrl(),
+            'http_method'  => self::resolveHttpMethod(),
+            'route_name'   => self::resolveRouteName(),
+            'auth_guard'   => self::resolveAuthGuard($user),
+            'subject_type' => $subject ? get_class($subject) : null,
+            'subject_id'   => $subject?->getKey(),
+            'request_id'   => self::resolveRequestId(),
             ...($modelClass::extraColumns()),
-        ]);
+        ];
+
+        self::write($modelClass, $data);
     }
 
     /**
@@ -62,22 +75,35 @@ class ActivityLogService
      */
     public static function logCreated(Model $model, string $module): void
     {
+        if (self::isModelAuditingDisabled($model)) {
+            return;
+        }
+
         self::log(
             AuditAction::Create,
             $module,
             'Created ' . self::resolveLabel($model),
             null,
             self::sanitize(self::filterExcluded($model, $model->getAttributes())),
+            subject: $model,
         );
     }
 
     /**
      * Log a model update event.
      * Stores only the changed fields to keep the log focused.
-     * Silently skips if nothing actually changed.
+     * Silently skips if nothing actually changed or if a restore is in progress.
      */
     public static function logUpdated(Model $model, string $module): void
     {
+        if (self::isModelAuditingDisabled($model)) {
+            return;
+        }
+
+        if (! empty($model->auditingRestore)) {
+            return;
+        }
+
         $dirty = $model->getDirty();
 
         if (empty($dirty)) {
@@ -92,6 +118,7 @@ class ActivityLogService
             'Updated ' . self::resolveLabel($model),
             self::sanitize(self::filterExcluded($model, $old)),
             self::sanitize(self::filterExcluded($model, $dirty)),
+            subject: $model,
         );
     }
 
@@ -102,13 +129,79 @@ class ActivityLogService
      */
     public static function logDeleted(Model $model, string $module): void
     {
+        if (self::isModelAuditingDisabled($model)) {
+            return;
+        }
+
         self::log(
             AuditAction::Delete,
             $module,
             'Deleted ' . self::resolveLabel($model),
             self::sanitize(self::filterExcluded($model, $model->getAttributes())),
             null,
+            subject: $model,
         );
+    }
+
+    /**
+     * Log a soft-deleted model being restored.
+     */
+    public static function logRestored(Model $model, string $module): void
+    {
+        if (self::isModelAuditingDisabled($model)) {
+            return;
+        }
+
+        self::log(
+            AuditAction::Restore,
+            $module,
+            'Restored ' . self::resolveLabel($model),
+            null,
+            self::sanitize(self::filterExcluded($model, $model->getAttributes())),
+            subject: $model,
+        );
+    }
+
+    /**
+     * Log a model being permanently deleted (force delete).
+     */
+    public static function logForceDeleted(Model $model, string $module): void
+    {
+        if (self::isModelAuditingDisabled($model)) {
+            return;
+        }
+
+        self::log(
+            AuditAction::ForceDelete,
+            $module,
+            'Permanently deleted ' . self::resolveLabel($model),
+            self::sanitize(self::filterExcluded($model, $model->getAttributes())),
+            null,
+            subject: $model,
+        );
+    }
+
+    /**
+     * Dispatch a queued job or write directly, wrapped in the silent-failure guard.
+     */
+    private static function write(string $modelClass, array $data): void
+    {
+        $queue = config('audit.queue', false);
+
+        try {
+            if ($queue !== false) {
+                $job = new WriteAuditLog($modelClass, $data);
+                dispatch(is_string($queue) ? $job->onQueue($queue) : $job);
+                return;
+            }
+
+            $modelClass::create($data);
+        } catch (\Throwable $e) {
+            if (! config('audit.silent_failures', false)) {
+                throw $e;
+            }
+            logger()->error('Audit log write failed: ' . $e->getMessage(), ['exception' => $e]);
+        }
     }
 
     /**
@@ -153,10 +246,14 @@ class ActivityLogService
     }
 
     /**
-     * Detect whether the request came from a web browser or a mobile/API client.
+     * Detect the platform context: 'cli', 'mobile' (JSON/API), or 'web'.
      */
     private static function detectPlatform(): string
     {
+        if (app()->runningInConsole()) {
+            return 'cli';
+        }
+
         return Request::expectsJson() ? 'mobile' : 'web';
     }
 
@@ -187,5 +284,90 @@ class ActivityLogService
         }
 
         return $user->{$field} ?? null;
+    }
+
+    /**
+     * Return the UUID that identifies the current request or console invocation.
+     * All log entries written during the same invocation share this ID.
+     */
+    private static function resolveRequestId(): ?string
+    {
+        try {
+            return app('audit.request_id');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Full URL of the current request, null for CLI invocations.
+     */
+    private static function resolveUrl(): ?string
+    {
+        if (app()->runningInConsole()) {
+            return null;
+        }
+
+        return Request::fullUrl();
+    }
+
+    /**
+     * HTTP verb of the current request (GET, POST, …), null for CLI invocations.
+     */
+    private static function resolveHttpMethod(): ?string
+    {
+        if (app()->runningInConsole()) {
+            return null;
+        }
+
+        return Request::method();
+    }
+
+    /**
+     * Named route of the current request, null for CLI invocations or unnamed routes.
+     */
+    private static function resolveRouteName(): ?string
+    {
+        if (app()->runningInConsole()) {
+            return null;
+        }
+
+        try {
+            return Request::route()?->getName();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * The name of the auth guard that authenticated the current user.
+     * Iterates configured guards and returns the first one that reports a
+     * logged-in user. Returns null when no user is authenticated.
+     */
+    private static function resolveAuthGuard(?object $user): ?string
+    {
+        if (! $user) {
+            return null;
+        }
+
+        foreach (array_keys(config('auth.guards', [])) as $guard) {
+            try {
+                if (auth()->guard($guard)->check()) {
+                    return $guard;
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Check whether the Auditable trait has suppressed logging for this model class.
+     */
+    private static function isModelAuditingDisabled(Model $model): bool
+    {
+        return method_exists($model, 'isAuditingDisabled') && $model::isAuditingDisabled();
     }
 }

@@ -4,6 +4,7 @@ namespace Williamug\Audited\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Request;
+use Williamug\Audited\Contracts\Causer;
 use Williamug\Audited\Enums\AuditAction;
 use Williamug\Audited\Jobs\WriteAuditLog;
 
@@ -18,10 +19,12 @@ class ActivityLogService
      * @param  string                    $description Human-readable summary of what happened.
      * @param  array<string,mixed>|null  $oldValues   State before the change.
      * @param  array<string,mixed>|null  $newValues   State after the change.
-     * @param  object|null               $actingUser  Explicit user to record. Defaults to
-     *                                                auth()->user(). Pass this when logging
-     *                                                auth events where the session user is
-     *                                                not yet set (e.g. Login event).
+     * @param  object|null               $causer      The actor responsible for this action.
+     *                                                Accepts an Eloquent user model (same
+     *                                                as before), a {@see Causer} implementor
+     *                                                for system-initiated actions (jobs,
+     *                                                commands), or null to fall back to
+     *                                                auth()->user().
      * @param  Model|null                $subject     The Eloquent model being acted on.
      *                                                Populated automatically by the Auditable
      *                                                trait; pass explicitly for manual logs
@@ -36,17 +39,18 @@ class ActivityLogService
         string $description,
         ?array $oldValues = null,
         ?array $newValues = null,
-        ?object $actingUser = null,
+        ?object $causer = null,
         ?Model $subject = null,
         ?array $tags = null,
     ): void {
-        $user = $actingUser ?? auth()->user();
+        $resolved   = self::resolveCauser($causer);
         $modelClass = config('audit.model');
 
         $data = [
-            'user_id'      => $user?->getKey(),
-            'user_name'    => self::resolveUserName($user),
-            'user_level'   => self::resolveUserLevel($user),
+            'user_id'      => $resolved['user_id'],
+            'user_name'    => $resolved['user_name'],
+            'user_level'   => $resolved['user_level'],
+            'causer_type'  => $resolved['causer_type'],
             'platform'     => self::detectPlatform(),
             'action'       => $action instanceof AuditAction ? $action->value : $action,
             'module'       => $module,
@@ -59,7 +63,7 @@ class ActivityLogService
             'url'          => self::resolveUrl(),
             'http_method'  => self::resolveHttpMethod(),
             'route_name'   => self::resolveRouteName(),
-            'auth_guard'   => self::resolveAuthGuard($user),
+            'auth_guard'   => self::resolveAuthGuard($resolved['user']),
             'subject_type' => $subject ? get_class($subject) : null,
             'subject_id'   => $subject?->getKey(),
             'request_id'   => self::resolveRequestId(),
@@ -255,6 +259,43 @@ class ActivityLogService
         }
 
         return Request::expectsJson() ? 'mobile' : 'web';
+    }
+
+    /**
+     * Resolve causer data from the provided actor.
+     *
+     * Returns an array with user_id, user_name, user_level, causer_type, and the
+     * raw user object (null for non-user causers) used by resolveAuthGuard().
+     *
+     * - Causer implementor (job, command, system) → causer_type from getCauserType(),
+     *   user_id is null, no guard lookup.
+     * - Eloquent model or null (falls back to auth()->user()) → causer_type 'user',
+     *   user_id from getKey().
+     * - No actor and no auth session → all null.
+     *
+     * @return array{user_id: int|string|null, user_name: string|null, user_level: string|null, causer_type: string|null, user: object|null}
+     */
+    private static function resolveCauser(?object $causer): array
+    {
+        if ($causer instanceof Causer) {
+            return [
+                'user_id'     => null,
+                'user_name'   => $causer->getCauserName(),
+                'user_level'  => null,
+                'causer_type' => $causer->getCauserType(),
+                'user'        => null,
+            ];
+        }
+
+        $user = $causer ?? auth()->user();
+
+        return [
+            'user_id'     => $user?->getKey(),
+            'user_name'   => self::resolveUserName($user),
+            'user_level'  => self::resolveUserLevel($user),
+            'causer_type' => $user ? 'user' : null,
+            'user'        => $user,
+        ];
     }
 
     /**

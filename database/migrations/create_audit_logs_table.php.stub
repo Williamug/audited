@@ -17,6 +17,9 @@ return new class extends Migration
             $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->string('user_name')->nullable();
             $table->string('user_level')->nullable();
+            // 'user' for human actors; any string for system causers (e.g. 'job',
+            // 'command', 'system'). Null when there was no actor at all.
+            $table->string('causer_type', 50)->nullable();
 
             // 'web' or 'mobile' (API requests that expect JSON).
             $table->string('platform', 20);

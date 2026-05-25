@@ -31,7 +31,7 @@ class LogAuthEvents
             AuditAction::Login,
             config('audit.auth_module', 'Authentication'),
             "User '{$name}' logged in.",
-            actingUser: $event->user,
+            causer: $event->user,
         );
     }
 
@@ -48,7 +48,7 @@ class LogAuthEvents
             AuditAction::Logout,
             config('audit.auth_module', 'Authentication'),
             "User '{$name}' logged out.",
-            actingUser: $event->user,
+            causer: $event->user,
         );
     }
 

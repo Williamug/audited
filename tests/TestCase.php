@@ -22,6 +22,13 @@ abstract class TestCase extends Orchestra
         return [AuditServiceProvider::class];
     }
 
+    protected function getPackageAliases($app): array
+    {
+        return [
+            'Audited' => \Williamug\Audited\Facades\Audited::class,
+        ];
+    }
+
     protected function defineEnvironment($app): void
     {
         $app['config']->set('database.default', 'testing');
@@ -61,6 +68,7 @@ abstract class TestCase extends Orchestra
             $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->string('user_name')->nullable();
             $table->string('user_level')->nullable();
+            $table->string('causer_type', 50)->nullable();
             $table->string('platform', 20);
             $table->string('action', 50)->index();
             $table->string('module', 80)->index();

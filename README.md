@@ -19,13 +19,23 @@ A simple, robust audit logging package for Laravel applications. Drop one trait 
   - [Customising the Log Description](#customising-the-log-description)
   - [Excluding Fields from Logs](#excluding-fields-from-logs)
   - [Manual Logging](#manual-logging)
+    - [Facade](#facade)
+    - [Global helper](#global-helper)
+    - [Service class](#service-class)
   - [Suppressing Audit Logging](#suppressing-audit-logging)
+- [System Actors (Causer)](#system-actors-causer)
 - [Authentication Event Logging](#authentication-event-logging)
 - [Soft Deletes](#soft-deletes)
 - [The AuditAction Enum](#the-auditaction-enum)
 - [Querying Audit Logs](#querying-audit-logs)
   - [Query Scopes](#query-scopes)
   - [Subject Relationship](#subject-relationship)
+- [Audit Trail Viewer](#audit-trail-viewer)
+  - [Global Audit Log Table](#global-audit-log-table)
+  - [Per-model Timeline](#per-model-timeline)
+  - [Tailwind CSS setup](#tailwind-css-setup)
+  - [Customising styles with CSS](#customising-styles-with-css)
+  - [Publishing and fully overriding the views](#publishing-and-fully-overriding-the-views)
 - [Extending the AuditLog Model](#extending-the-auditlog-model)
 - [Multitenancy](#multitenancy)
   - [Stamping Tenant Context on Every Log Entry](#stamping-tenant-context-on-every-log-entry)
@@ -46,6 +56,7 @@ A simple, robust audit logging package for Laravel applications. Drop one trait 
   - [Custom Login Credential Field](#custom-login-credential-field)
   - [Sensitive Fields](#sensitive-fields)
   - [Custom Table Name](#custom-table-name)
+- [Real-World Example](#real-world-example)
 - [Testing](#testing)
 - [Changelog](#changelog)
 - [License](#license)
@@ -230,26 +241,60 @@ class User extends Model
 
 ### Manual Logging
 
-For events that are not tied to a model lifecycle — such as approving a report, exporting data, or a custom business action — use `ActivityLogService::log()` directly.
+For events not tied to a model lifecycle — approving a report, exporting data, any custom business action — the package gives you three equivalent ways to write a log entry. Pick the one that fits your style.
+
+**Facade** (recommended — no import needed, IDE-friendly):
 
 ```php
-use Williamug\Audited\Enums\AuditAction;
-use Williamug\Audited\Services\ActivityLogService;
+Audited::log(AuditAction::Approve, 'Collections', 'Approved Sunday collection.');
 
-// Using a built-in action from the AuditAction enum
-ActivityLogService::log(
-    AuditAction::Approve,
-    'Collections',
-    'Approved Sunday collection for St. Peter\'s Church.',
-);
-
-// Recording old and new values alongside the log entry
-ActivityLogService::log(
+// With old/new values
+Audited::log(
     AuditAction::Update,
     'Settings',
     'Updated application settings.',
-    ['maintenance_mode' => false],   // old values
-    ['maintenance_mode' => true],    // new values
+    ['maintenance_mode' => false],
+    ['maintenance_mode' => true],
+);
+```
+
+The `Audited` facade is registered automatically via Laravel's package auto-discovery — no `use` import required in your controllers or services.
+
+**Global helper** (best for quick one-liners):
+
+```php
+audited(AuditAction::Approve, 'Collections', 'Approved Sunday collection.');
+
+audited('transfer', 'Ministers', 'Transferred Rev. John to St. Peters Parish');
+```
+
+The `audited()` helper is loaded automatically via Composer's `files` autoload — available everywhere in your application with no imports.
+
+**Service class** (explicit, useful when injecting or mocking):
+
+```php
+use Williamug\Audited\Services\ActivityLogService;
+
+ActivityLogService::log(AuditAction::Approve, 'Collections', 'Approved Sunday collection.');
+```
+
+All three call the same underlying logic and write to the same table. The Facade and helper both support the full set of named arguments:
+
+```php
+Audited::log(
+    action: AuditAction::Create,
+    module: 'Members',
+    description: 'Imported member records.',
+    tags: ['batch_id' => 'imp_2024_001', 'source' => 'csv'],
+);
+
+audited(
+    action: AuditAction::Update,
+    module: 'Settings',
+    description: 'Updated fee structure.',
+    oldValues: ['base_fee' => 5000],
+    newValues: ['base_fee' => 7500],
+    tags: ['ticket' => 'SUP-442'],
 );
 ```
 
@@ -258,10 +303,10 @@ ActivityLogService::log(
 The `$action` parameter accepts both the `AuditAction` enum and a plain string. Use a plain string for any domain-specific action that is not in the enum — there is no need to extend it.
 
 ```php
-ActivityLogService::log('transfer', 'Ministers', 'Transferred Rev. John to St. Peters Parish');
-ActivityLogService::log('ordination', 'Ministers', 'Rev. James ordained as Deacon.');
-ActivityLogService::log('suspension', 'Staff', 'Staff member suspended pending investigation.');
-ActivityLogService::log('reconcile', 'Accounts', 'Monthly accounts reconciled.');
+audited('transfer', 'Ministers', 'Transferred Rev. John to St. Peters Parish');
+audited('ordination', 'Ministers', 'Rev. James ordained as Deacon.');
+audited('suspension', 'Staff', 'Staff member suspended pending investigation.');
+audited('reconcile', 'Accounts', 'Monthly accounts reconciled.');
 ```
 
 Custom action strings are stored verbatim in the `action` column. Handle them gracefully in your UI:
@@ -282,19 +327,19 @@ Custom action strings are stored verbatim in the `action` column. Handle them gr
 Pass a `tags` array to attach arbitrary key-value metadata to any log entry. Useful for batch IDs, import sources, workflow step names, or any context that does not belong in the description.
 
 ```php
-ActivityLogService::log(
+Audited::log(
     AuditAction::Create,
     'Members',
     'Imported member records.',
     tags: ['batch_id' => 'imp_2024_001', 'source' => 'csv', 'rows' => 1500],
 );
 
-ActivityLogService::log(
+audited(
     AuditAction::Update,
     'Settings',
     'Updated fee structure.',
-    ['base_fee' => 5000],
-    ['base_fee' => 7500],
+    oldValues: ['base_fee' => 5000],
+    newValues: ['base_fee' => 7500],
     tags: ['ticket' => 'SUP-442', 'approved_by' => 'finance'],
 );
 ```
@@ -307,10 +352,10 @@ $log->tags; // ['batch_id' => 'imp_2024_001', 'source' => 'csv', 'rows' => 1500]
 
 #### Linking a manual log entry to a specific model
 
-Pass a `$subject` to associate the log entry with an Eloquent model. This populates `subject_type` and `subject_id` so the entry appears in `$model->auditLogs()` alongside the automatically generated entries.
+Pass a `subject` to associate the log entry with an Eloquent model. This populates `subject_type` and `subject_id` so the entry appears in `$model->auditLogs()` alongside the automatically generated entries.
 
 ```php
-ActivityLogService::log(
+Audited::log(
     AuditAction::Approve,
     'Collections',
     'Approved Sunday collection.',
@@ -318,18 +363,21 @@ ActivityLogService::log(
 );
 ```
 
-#### Logging on behalf of a specific user
+#### Specifying the actor
 
-By default the service reads the authenticated user from `auth()->user()`. Pass an explicit `$actingUser` when you need to record a different user — for example, during auth events where the session user is not yet set.
+By default the log reads `auth()->user()` as the actor. Pass an explicit `causer` when you need to attribute the log entry to a different user, or to a system process with no user at all.
 
 ```php
-ActivityLogService::log(
+// Attribute to a specific user (e.g. admin acting on behalf of another user)
+Audited::log(
     AuditAction::Create,
     'Accounts',
     "Admin created account for '{$newUser->name}'.",
-    actingUser: $adminUser,
+    causer: $adminUser,
 );
 ```
+
+For system actors (jobs, commands, scheduled tasks) see [System Actors (Causer)](#system-actors-causer).
 
 ---
 
@@ -357,6 +405,75 @@ Invoice::withoutAudit(function () {
 ```
 
 Logging is always re-enabled after the callback, even if the callback throws an exception.
+
+---
+
+## System Actors (Causer)
+
+When logging from a job, command, or scheduled task there is no authenticated user. Without explicit attribution `user_id` is `null`, which is ambiguous — was this a guest action or a background process?
+
+The `causer` parameter solves this. It accepts any Eloquent user model (same as always), a `SystemCauser`, or anything that implements the `Causer` interface.
+
+```php
+use Williamug\Audited\Causers\SystemCauser;
+use Williamug\Audited\Enums\AuditAction;
+use Williamug\Audited\Services\ActivityLogService;
+
+// Inside a queued job
+ActivityLogService::log(
+    AuditAction::Create,
+    'Members',
+    'Imported 1,500 member records from CSV.',
+    causer: new SystemCauser('ImportMembersJob', 'job'),
+);
+
+// Inside an Artisan command
+ActivityLogService::log(
+    AuditAction::Delete,
+    'Sessions',
+    'Purged 230 expired sessions.',
+    causer: new SystemCauser('sessions:prune', 'command'),
+);
+
+// Inside a scheduled task
+ActivityLogService::log(
+    AuditAction::Export,
+    'Reports',
+    'Generated nightly financial summary.',
+    causer: new SystemCauser('NightlyReportGenerator', 'system'),
+);
+```
+
+The `causer_type` column makes the actor unambiguous in every log entry:
+
+| `user_id` | `user_name` | `causer_type` | Meaning |
+|---|---|---|---|
+| `42` | `Jane Doe` | `user` | Authenticated human |
+| `null` | `ImportMembersJob` | `job` | Queued job |
+| `null` | `sessions:prune` | `command` | Artisan command |
+| `null` | `NightlyReportGenerator` | `system` | Scheduled process |
+| `null` | `null` | `null` | No actor (e.g. failed login attempt) |
+
+### Custom causer type
+
+Implement the `Causer` interface on any class:
+
+```php
+use Williamug\Audited\Contracts\Causer;
+
+class DataMigration implements Causer
+{
+    public function getCauserName(): string { return 'DataMigration v2.3'; }
+    public function getCauserType(): string { return 'migration'; }
+}
+
+ActivityLogService::log(
+    AuditAction::Update,
+    'Schema',
+    'Backfilled missing invoice_number values.',
+    causer: new DataMigration(),
+);
+```
 
 ---
 
@@ -541,6 +658,225 @@ $log->subject;
 ```
 
 **Existing apps:** see [Upgrading existing installs](#upgrading-existing-installs) for the migration that adds all new columns at once.
+
+---
+
+## Audit Trail Viewer
+
+The package ships with two ready-made viewer components:
+
+- **Global audit log table** — `<livewire:audited::log-table />` — an admin dashboard showing all entries across the entire application, with live search, filters, and expandable detail rows.
+- **Per-model timeline** — `<x-audited::timeline :subject="$model" />` — a scoped history viewer for a single record, shown inline on a show/detail page.
+
+---
+
+### Global Audit Log Table
+
+A full-featured, live-filtered table for an audit log admin page. Drop one tag and it works:
+
+```blade
+<livewire:audited::log-table />
+```
+
+That single tag renders:
+
+- **Live search** — matches user name, description, and IP address as you type
+- **Action filter** — dropdown auto-populated from the actions in your logs
+- **Module filter** — dropdown auto-populated from the modules in your logs
+- **Level filter** — filter by user role/level
+- **Platform filter** — Web, Mobile, or CLI
+- **Date range** — from/to date pickers
+- **Clear Filters** — appears only when a filter is active
+- **Paginated table** — Date & Time · User · Level · Action badge · Module · Description · Platform badge · IP Address · Device
+- **Expandable detail row** — click **View** on any row to see request context, old/new value diff, and tags inline
+
+```blade
+{{-- Audit log admin page --}}
+<div class="max-w-7xl mx-auto px-4 py-8">
+    <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-6">Audit Log</h1>
+    <livewire:audited::log-table />
+</div>
+```
+
+Requires Livewire 3 or 4. The component is only registered when Livewire is detected — no error if it is absent.
+
+---
+
+### Per-model Timeline
+
+A chronological history viewer scoped to one record. Drop it on any show/detail page:
+
+```blade
+<x-audited::timeline :subject="$invoice" />
+```
+
+A **timeline** is a vertical list of events ordered by time, connected by a line. Each entry shows the action badge, the module, what changed, who did it, and when.
+
+### Blade component
+
+```blade
+{{-- Renders the last 25 audit entries for $invoice --}}
+<x-audited::timeline :subject="$invoice" />
+
+{{-- Show more entries --}}
+<x-audited::timeline :subject="$invoice" :limit="50" />
+
+{{-- Show a before/after diff table for each change --}}
+<x-audited::timeline :subject="$invoice" :show-values="true" />
+```
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `subject` | `Model` | required | The Eloquent model whose history to display |
+| `limit` | `int` | `25` | Maximum number of entries to show |
+| `show-values` | `bool` | `false` | Render a before/after diff table for each entry |
+
+Each rendered entry includes:
+
+- **Action badge** — colour-coded by action type using the `AuditAction` enum
+- **Module** — the area of the application (e.g. Billing, Users)
+- **Description** — the human-readable summary
+- **Actor name** — who performed the action, with a causer-type badge for system actors (job, command, etc.)
+- **Timestamp** — relative (`2 minutes ago`) with the absolute time visible on hover
+
+### Livewire component (live pagination)
+
+If your application uses Livewire 3 or 4, a live-paginated version is available:
+
+```blade
+<livewire:audited::timeline :subject="$invoice" />
+
+<livewire:audited::timeline :subject="$invoice" :per-page="20" :show-values="true" />
+```
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `subject` | `Model` | required | The Eloquent model whose history to display |
+| `per-page` | `int` | `10` | Entries per page |
+| `show-values` | `bool` | `false` | Render a before/after diff table for each entry |
+
+Livewire is an **optional** dependency — the component is only registered when Livewire is detected. No error is thrown if Livewire is not installed.
+
+### Tailwind CSS setup
+
+The package views use Tailwind CSS utility classes. In production, Tailwind's content scanner only looks at your application files — `vendor/` is excluded by default. Add the package view path to your Tailwind config so the classes are never purged.
+
+**Tailwind v3 (`tailwind.config.js`):**
+
+```js
+module.exports = {
+  content: [
+    './resources/**/*.blade.php',
+    './vendor/williamug/audited/resources/views/**/*.blade.php', // ← add this
+  ],
+  // ...
+}
+```
+
+**Tailwind v4 (`resources/css/app.css`):**
+
+```css
+@import "tailwindcss";
+@source "../../vendor/williamug/audited/resources/views"; /* ← add this */
+```
+
+Without this, the audit views will render with no styling in any environment where Tailwind's output is built (staging, production, or any Vite/Mix build step).
+
+---
+
+### Customising styles with CSS
+
+Every meaningful element in the package views has a semantic `audited-*` CSS class alongside the Tailwind utilities. You can target these with plain CSS in your own stylesheet — **no need to publish the views**.
+
+**Timeline components (`<x-audited::timeline>` and `<livewire:audited::timeline>`):**
+
+| Class | Element |
+|---|---|
+| `audited-timeline` | Outer wrapper |
+| `audited-timeline-entry` | Each `<li>` entry |
+| `audited-timeline-connector` | Vertical connecting line |
+| `audited-timeline-dot` | Circle dot for each entry |
+| `audited-action-badge` | Action badge (Create, Update, etc.) |
+| `audited-module-label` | Module chip |
+| `audited-timeline-description` | Description text |
+| `audited-timeline-actor` | Actor/user name line |
+| `audited-causer-badge` | Causer-type badge (job, command, etc.) |
+| `audited-values-diff` | Before/after diff table wrapper |
+| `audited-values-diff-field` | Field name cell |
+| `audited-values-diff-before` | Old value cell |
+| `audited-values-diff-after` | New value cell |
+| `audited-timestamp` | `<time>` element |
+
+**Log table (`<livewire:audited::log-table>`):**
+
+| Class | Element |
+|---|---|
+| `audited-log-table` | Outer wrapper |
+| `audited-log-table-filters` | Filters card |
+| `audited-log-table-search` | Search input |
+| `audited-log-table-select` | Filter dropdowns |
+| `audited-log-table-date` | Date range inputs |
+| `audited-log-table-clear` | Clear Filters button |
+| `audited-log-table-row` | Each table row |
+| `audited-log-table-row--expanded` | Modifier on an expanded row |
+| `audited-log-table-detail` | Expanded detail `<tr>` |
+| `audited-log-table-detail-context` | Request context section inside detail row |
+| `audited-log-table-detail-tags` | Tags section inside detail row |
+| `audited-log-table-toggle` | View/Close toggle button |
+| `audited-action-badge` | Action badge |
+| `audited-causer-badge` | Causer-type badge |
+| `audited-platform-badge` | Platform badge |
+| `audited-platform-badge--web` | Web platform variant |
+| `audited-platform-badge--mobile` | Mobile platform variant |
+| `audited-platform-badge--cli` | CLI platform variant |
+| `audited-values-diff` | Before/after diff table wrapper |
+| `audited-values-diff-field` | Field name cell |
+| `audited-values-diff-before` | Old value cell |
+| `audited-values-diff-after` | New value cell |
+
+**Example — brand the action badge with your own colours:**
+
+```css
+/* In your app.css or a dedicated audited.css */
+
+/* Override the entire badge */
+.audited-action-badge {
+  border-radius: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+}
+
+/* Style platform badges */
+.audited-platform-badge--web    { background: #e0f2fe; color: #0369a1; }
+.audited-platform-badge--mobile { background: #dcfce7; color: #15803d; }
+.audited-platform-badge--cli    { background: #fef3c7; color: #92400e; }
+
+/* Style the timeline dot by action type — combine with a data attribute if needed */
+.audited-timeline-dot { border-width: 2px; }
+```
+
+No view publishing required.
+
+---
+
+### Publishing and fully overriding the views
+
+For deeper structural changes, publish and edit:
+
+```bash
+php artisan vendor:publish --tag=audited-views
+```
+
+Published views live in `resources/views/vendor/audited/` and are never overwritten by package updates.
+
+```
+resources/views/vendor/audited/
+├── components/
+│   └── timeline.blade.php            ← Blade timeline view
+└── livewire/
+    ├── audit-timeline.blade.php      ← Livewire timeline view
+    └── audit-log-table.blade.php     ← Livewire log table view
+```
 
 ---
 
@@ -859,6 +1195,9 @@ public function up(): void
 
         // Request ID tracing
         $table->string('request_id', 36)->nullable()->index()->after('subject_id');
+
+        // Causer type — distinguishes human actors from system processes
+        $table->string('causer_type', 50)->nullable()->after('user_level');
     });
 }
 ```
@@ -942,6 +1281,119 @@ If `audit_logs` conflicts with an existing table in your application, change the
 // config/audit.php
 'table' => 'activity_logs',
 ```
+
+---
+
+## Real-World Example
+
+The following shows a complete integration in a billing module. This is the full picture — model, controller action, background job, and audit history page. The only additions to your existing code are the trait, the causer, and one component tag.
+
+### The model
+
+```php
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Williamug\Audited\Traits\Auditable;
+
+class Invoice extends Model
+{
+    use Auditable, SoftDeletes;
+
+    // Module label written to every log entry for this model
+    protected string $auditModule = 'Billing';
+
+    // High-frequency columns that are not meaningful audit events
+    public array $auditExclude = ['last_viewed_at', 'pdf_cached_at'];
+
+    // Richer label in log descriptions instead of "Invoice #42"
+    public function auditLabel(): string
+    {
+        return "Invoice #{$this->number} — {$this->client->name}";
+    }
+}
+```
+
+Every `create`, `update`, `delete`, `restore`, and `forceDelete` on `Invoice` is now automatically recorded. Nothing else is required for that coverage.
+
+### A controller action
+
+```php
+use Williamug\Audited\Enums\AuditAction;
+use Williamug\Audited\Services\ActivityLogService;
+
+class InvoiceController extends Controller
+{
+    public function approve(Invoice $invoice): RedirectResponse
+    {
+        $invoice->update(['status' => 'approved', 'approved_at' => now()]);
+
+        // The update above already writes an automatic log entry.
+        // This additional manual entry records the business action explicitly.
+        ActivityLogService::log(
+            AuditAction::Approve,
+            'Billing',
+            "Approved Invoice #{$invoice->number} ({$invoice->client->name}).",
+            subject: $invoice,
+            tags: ['approved_by_ip' => request()->ip()],
+        );
+
+        return redirect()->back()->with('success', 'Invoice approved.');
+    }
+}
+```
+
+### A background job
+
+```php
+use Williamug\Audited\Causers\SystemCauser;
+
+class SendOverdueRemindersJob implements ShouldQueue
+{
+    public function handle(): void
+    {
+        foreach (Invoice::overdue()->get() as $invoice) {
+            Mail::to($invoice->client->email)->send(new OverdueReminderMail($invoice));
+
+            ActivityLogService::log(
+                'reminder_sent',
+                'Billing',
+                "Overdue reminder sent to {$invoice->client->email}.",
+                subject: $invoice,
+                causer: new SystemCauser('SendOverdueRemindersJob', 'job'),
+            );
+        }
+    }
+}
+```
+
+### The audit history page
+
+```blade
+{{-- resources/views/invoices/show.blade.php --}}
+
+<h2>Invoice #{{ $invoice->number }}</h2>
+
+{{-- ... invoice details ... --}}
+
+<section class="mt-8">
+    <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+        Audit History
+    </h3>
+    <p class="mt-1 text-sm text-gray-500">
+        Every action taken on this invoice, most recent first.
+    </p>
+
+    <div class="mt-4">
+        {{-- Static: shows last 25 entries, with before/after diff --}}
+        <x-audited::timeline :subject="$invoice" :show-values="true" />
+
+        {{-- Or live-paginated if Livewire is installed --}}
+        {{-- <livewire:audited::timeline :subject="$invoice" :per-page="15" :show-values="true" /> --}}
+    </div>
+</section>
+```
+
+That is the entire integration. The controller has no audit-specific wiring beyond the one manual `log()` call. The view has no query, no loop, no formatting logic. The background job identifies itself as a system actor with one line.
 
 ---
 

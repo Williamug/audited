@@ -4,6 +4,7 @@
 [![tests](https://github.com/Williamug/audited/actions/workflows/tests.yml/badge.svg)](https://github.com/Williamug/audited/actions/workflows/tests.yml)
 [![Total Downloads](https://img.shields.io/packagist/dt/williamug/audited.svg?style=flat-square)](https://packagist.org/packages/williamug/audited)
 
+_"The only Laravel audit package that ships a complete admin UI — Livewire table, Vue/Inertia table, and per-model timeline — with zero configuration."_
 
 A simple, robust audit logging package for Laravel applications. Drop one trait onto a model and every create, update, and delete is automatically recorded. Authentication events, manual logging, per-model subject relationships, request-level tracing, async queue support, scheduled pruning, and a configurable schema are included out of the box.
 

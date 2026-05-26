@@ -6,7 +6,7 @@
 
 _"The only Laravel audit package that ships a complete admin UI — Livewire table, Vue/Inertia table, and per-model timeline — with zero configuration."_
 
-A simple, robust audit logging package for Laravel applications. Drop one trait onto a model and every create, update, and delete is automatically recorded. Authentication events, manual logging, per-model subject relationships, request-level tracing, async queue support, scheduled pruning, and a configurable schema are included out of the box.
+A simple, robust audit logging package for Laravel applications. Drop one trait onto a model and every create, update, delete, and many-to-many relationship change is automatically recorded. Authentication events, manual logging, per-model subject relationships, request-level tracing, async queue support, scheduled pruning, and a configurable schema are included out of the box.
 
 ---
 
@@ -27,6 +27,7 @@ A simple, robust audit logging package for Laravel applications. Drop one trait 
 - [System Actors (Causer)](#system-actors-causer)
 - [Authentication Event Logging](#authentication-event-logging)
 - [Soft Deletes](#soft-deletes)
+- [Many-to-Many Relationships](#many-to-many-relationships)
 - [The AuditAction Enum](#the-auditaction-enum)
 - [Querying Audit Logs](#querying-audit-logs)
   - [Query Scopes](#query-scopes)
@@ -532,6 +533,93 @@ class Invoice extends Model
 
     protected string $auditModule = 'Billing';
 }
+```
+
+---
+
+## Many-to-Many Relationships
+
+Changes to `BelongsToMany` pivot tables are not recorded by default — pivot operations (`attach`, `detach`, `sync`, `updateExistingPivot`) bypass Eloquent's standard model events and would otherwise go untracked.
+
+The `Auditable` trait intercepts these operations transparently through a custom relation class. Opt in per model by declaring an `$auditRelationships` array with the names of the relationships you want to track.
+
+### Opting in
+
+```php
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Williamug\Audited\Traits\Auditable;
+
+class Role extends Model
+{
+    use Auditable;
+
+    protected string $auditModule = 'Roles';
+
+    // Only relationships listed here will be audited.
+    public array $auditRelationships = ['permissions'];
+
+    public function permissions(): BelongsToMany
+    {
+        return $this->belongsToMany(Permission::class);
+    }
+}
+```
+
+No other changes are needed. All four pivot operations are now automatically logged for the `permissions` relationship:
+
+| Operation | Action recorded | `old_values` | `new_values` |
+|---|---|---|---|
+| `attach($ids)` | `update` | `null` | `['permissions' => [1, 2]]` |
+| `detach($ids)` | `update` | `['permissions' => [1, 2]]` | `null` |
+| `sync($ids)` | `update` × 2 | detach entry + attach entry | (see above) |
+| `updateExistingPivot($id, $attrs)` | `update` | `null` | `['permissions' => [1]]` |
+
+`sync()` produces two log entries when IDs change — one for the detached IDs and one for the newly attached IDs. When the synced set is identical to the current set, no entries are written.
+
+### What it looks like
+
+```php
+$role->permissions()->attach([1, 2, 3]);
+// Writes:
+// action      → 'update'
+// module      → 'Roles'
+// description → 'Attached permissions to Role #1'
+// old_values  → null
+// new_values  → ['permissions' => [1, 2, 3]]
+// subject     → Role #1 (polymorphic link)
+
+$role->permissions()->detach([2]);
+// Writes:
+// action      → 'update'
+// description → 'Detached permissions from Role #1'
+// old_values  → ['permissions' => [2]]
+// new_values  → null
+
+$role->permissions()->sync([3, 4]);
+// Role had [1, 2, 3] — writes two entries:
+// 1. Detached permissions [1, 2]
+// 2. Attached permissions [4]
+// (ID 3 was already attached — no entry for it)
+```
+
+### Multiple relationships
+
+List every relationship you want audited:
+
+```php
+public array $auditRelationships = ['permissions', 'roles', 'tags'];
+```
+
+Relationships not in the list are silently skipped even if `attach()` or `detach()` is called on them.
+
+### Suppressing pivot logs
+
+`withoutAudit()` suppresses pivot log entries for the model class in the same way it suppresses create/update/delete entries:
+
+```php
+Role::withoutAudit(function () use ($role) {
+    $role->permissions()->sync([1, 2, 3]); // not logged
+});
 ```
 
 ---

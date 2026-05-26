@@ -2,8 +2,11 @@
 
 namespace Williamug\Audited\Traits;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Williamug\Audited\Relations\AuditableBelongsToMany;
 use Williamug\Audited\Services\ActivityLogService;
 
 trait Auditable
@@ -49,6 +52,28 @@ trait Auditable
                 ActivityLogService::logForceDeleted($model, $model->getAuditModule());
             });
         }
+
+    }
+
+    /**
+     * Override the default BelongsToMany instantiation to return AuditableBelongsToMany,
+     * which intercepts attach/detach/updateExistingPivot and writes audit log entries
+     * for any relationships listed in $auditRelationships on the model.
+     */
+    protected function newBelongsToMany(
+        Builder $query,
+        Model $parent,
+        $table,
+        $foreignPivotKey,
+        $relatedPivotKey,
+        $parentKey,
+        $relatedKey,
+        $relationName = null,
+    ): AuditableBelongsToMany {
+        return new AuditableBelongsToMany(
+            $query, $parent, $table, $foreignPivotKey,
+            $relatedPivotKey, $parentKey, $relatedKey, $relationName,
+        );
     }
 
     /**

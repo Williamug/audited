@@ -186,6 +186,59 @@ class ActivityLogService
     }
 
     /**
+     * Log a BelongsToMany pivot change (attach, detach, or pivot attribute update).
+     *
+     * Only fires when the parent model declares an $auditRelationships array
+     * containing the relationship name — making pivot auditing strictly opt-in.
+     */
+    public static function logPivotChanged(
+        Model $model,
+        string $relationName,
+        string $event,
+        array $ids,
+        string $module,
+    ): void {
+        if (self::isModelAuditingDisabled($model)) {
+            return;
+        }
+
+        if (! self::shouldAuditRelationship($model, $relationName)) {
+            return;
+        }
+
+        if (empty($ids)) {
+            return;
+        }
+
+        [$oldValues, $newValues, $description] = match ($event) {
+            'attached' => [
+                null,
+                [$relationName => array_values($ids)],
+                'Attached ' . $relationName . ' to ' . self::resolveLabel($model),
+            ],
+            'detached' => [
+                [$relationName => array_values($ids)],
+                null,
+                'Detached ' . $relationName . ' from ' . self::resolveLabel($model),
+            ],
+            default => [
+                null,
+                [$relationName => array_values($ids)],
+                'Updated ' . $relationName . ' pivot for ' . self::resolveLabel($model),
+            ],
+        };
+
+        self::log(
+            AuditAction::Update,
+            $module,
+            $description,
+            $oldValues,
+            $newValues,
+            subject: $model,
+        );
+    }
+
+    /**
      * Dispatch a queued job or write directly, wrapped in the silent-failure guard.
      */
     private static function write(string $modelClass, array $data): void
@@ -410,5 +463,18 @@ class ActivityLogService
     private static function isModelAuditingDisabled(Model $model): bool
     {
         return method_exists($model, 'isAuditingDisabled') && $model::isAuditingDisabled();
+    }
+
+    /**
+     * Check whether the given relationship name should be audited on the model.
+     * Returns true only when $auditRelationships is declared and includes the name.
+     */
+    private static function shouldAuditRelationship(Model $model, string $relationName): bool
+    {
+        if (! property_exists($model, 'auditRelationships')) {
+            return false;
+        }
+
+        return in_array($relationName, $model->auditRelationships, true);
     }
 }

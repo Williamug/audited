@@ -63,6 +63,24 @@ abstract class TestCase extends Orchestra
             $table->softDeletes();
         });
 
+        Schema::create('roles', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create('permissions', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create('role_permission', function (Blueprint $table) {
+            $table->unsignedBigInteger('role_id');
+            $table->unsignedBigInteger('permission_id');
+            $table->primary(['role_id', 'permission_id']);
+        });
+
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id')->nullable()->index();

@@ -1,6 +1,6 @@
 {
   "name": "williamug/audited",
-  "description": "A simple, robust audit logging package for Laravel applications. Drop one trait onto a model and every create, update, and delete is automatically recorded. Authentication events, manual logging, scheduled pruning, and a configurable schema are included out of the box.",
+  "description": "The only Laravel audit package that ships a complete admin UI — Livewire table, Vue/Inertia table, and per-model timeline — with zero configuration. A simple, robust audit logging package for Laravel applications. Drop one trait onto a model and every create, update, delete, and many-to-many relationship change is automatically recorded.",
   "type": "library",
   "license": "MIT",
   "authors": [

@@ -39,6 +39,8 @@ class AuditServiceProvider extends ServiceProvider
         $this->registerRequestId();
         $this->registerViews();
         $this->registerLivewireComponents();
+        $this->registerApiRoutes();
+        $this->registerVueAssets();
     }
 
     private function registerPublishables(): void
@@ -107,5 +109,21 @@ class AuditServiceProvider extends ServiceProvider
 
         \Livewire\Livewire::component('audited::timeline', AuditTimeline::class);
         \Livewire\Livewire::component('audited::log-table', AuditLogTable::class);
+    }
+
+    private function registerApiRoutes(): void
+    {
+        if (! config('audit.api_routes', false)) {
+            return;
+        }
+
+        $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
+    }
+
+    private function registerVueAssets(): void
+    {
+        $this->publishes([
+            __DIR__ . '/../resources/js/components' => resource_path('js/vendor/audited'),
+        ], 'audited-vue');
     }
 }

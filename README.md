@@ -4,6 +4,7 @@
 [![tests](https://github.com/Williamug/audited/actions/workflows/tests.yml/badge.svg)](https://github.com/Williamug/audited/actions/workflows/tests.yml)
 [![Total Downloads](https://img.shields.io/packagist/dt/williamug/audited.svg?style=flat-square)](https://packagist.org/packages/williamug/audited)
 
+_"The only Laravel audit package that ships a complete admin UI — Livewire table, Vue/Inertia table, and per-model timeline — with zero configuration."_
 
 A simple, robust audit logging package for Laravel applications. Drop one trait onto a model and every create, update, and delete is automatically recorded. Authentication events, manual logging, per-model subject relationships, request-level tracing, async queue support, scheduled pruning, and a configurable schema are included out of the box.
 
@@ -36,6 +37,10 @@ A simple, robust audit logging package for Laravel applications. Drop one trait 
   - [Tailwind CSS setup](#tailwind-css-setup)
   - [Customising styles with CSS](#customising-styles-with-css)
   - [Publishing and fully overriding the views](#publishing-and-fully-overriding-the-views)
+- [Vue and Inertia](#vue-and-inertia)
+  - [Self-fetch mode](#self-fetch-mode-standalone-vue--spa)
+  - [Props / Inertia mode](#props--inertia-mode)
+  - [Component props reference](#component-props-reference)
 - [Extending the AuditLog Model](#extending-the-auditlog-model)
 - [Multitenancy](#multitenancy)
   - [Stamping Tenant Context on Every Log Entry](#stamping-tenant-context-on-every-log-entry)
@@ -877,6 +882,164 @@ resources/views/vendor/audited/
     ├── audit-timeline.blade.php      ← Livewire timeline view
     └── audit-log-table.blade.php     ← Livewire log table view
 ```
+
+---
+
+## Vue and Inertia
+
+The package ships two Vue 3 components — `AuditLogTable.vue` and `AuditTimeline.vue` — that mirror the Livewire components exactly. They work in two modes automatically detected at runtime:
+
+| Mode | When to use | How data flows |
+|---|---|---|
+| **Self-fetch** | Standalone Vue SPA, or any page where you don't want to write a controller | Component fetches JSON from the built-in API routes |
+| **Props / Inertia** | Inertia apps — data comes from your controller | Pass a paginator as props; component emits events for filter changes |
+
+### Step 1 — Publish the Vue components
+
+```bash
+php artisan vendor:publish --tag=audited-vue
+```
+
+Files are copied to `resources/js/vendor/audited/`. Edit them freely — they follow the same `audited-*` CSS class conventions as the Blade/Livewire views.
+
+### Step 2 — Enable the API routes (self-fetch mode only)
+
+Skip this step if you are using Inertia props mode.
+
+```env
+# .env
+AUDIT_API_ROUTES=true
+```
+
+The routes are registered with `['web', 'auth']` middleware by default. Override in `config/audit.php`:
+
+```php
+'api_middleware' => ['web', 'auth:sanctum'],
+'api_prefix'     => 'admin/api/audit',     // optional custom prefix
+```
+
+### Self-fetch mode (standalone Vue / SPA)
+
+Drop a component in and it works — no controller needed:
+
+```vue
+<script setup>
+import AuditLogTable from '@/vendor/audited/AuditLogTable.vue'
+import AuditTimeline from '@/vendor/audited/AuditTimeline.vue'
+</script>
+
+<template>
+  <!-- Full admin table — fetches /audited/api/logs automatically -->
+  <AuditLogTable />
+
+  <!-- Per-model timeline — fetches /audited/api/timeline automatically -->
+  <AuditTimeline
+    subject-type="App\Models\Invoice"
+    :subject-id="invoice.id"
+    :show-values="true"
+  />
+</template>
+```
+
+### Props / Inertia mode
+
+Use the `ServesAuditLogs` trait to build the controller with one line:
+
+```php
+use Williamug\Audited\Http\Concerns\ServesAuditLogs;
+
+class AuditLogController extends Controller
+{
+    use ServesAuditLogs;
+
+    public function index(Request $request)
+    {
+        return Inertia::render('Admin/AuditLog', $this->auditLogProps($request));
+    }
+
+    public function invoiceHistory(Request $request, Invoice $invoice)
+    {
+        return Inertia::render('Invoices/History', $this->auditTimelineProps($request, $invoice));
+    }
+}
+```
+
+The props passed to the page match what the Vue components expect (`logs`, `allActions`, `allModules`, `allLevels`, `filters`).
+
+In the Vue page component, listen to `filter-change` and call Inertia's `router.get()`:
+
+```vue
+<!-- resources/js/Pages/Admin/AuditLog.vue -->
+<script setup>
+import { router } from '@inertiajs/vue3'
+import AuditLogTable from '@/vendor/audited/AuditLogTable.vue'
+
+const props = defineProps({
+  logs:       Object,
+  allActions: Array,
+  allModules: Array,
+  allLevels:  Array,
+  filters:    Object,
+})
+
+function onFilterChange(filters) {
+  router.get(route('admin.audit'), filters, { preserveState: true, replace: true })
+}
+</script>
+
+<template>
+  <AuditLogTable
+    :logs="logs"
+    :all-actions="allActions"
+    :all-modules="allModules"
+    :all-levels="allLevels"
+    :filters="filters"
+    @filter-change="onFilterChange"
+  />
+</template>
+```
+
+For the timeline in props mode:
+
+```vue
+<!-- resources/js/Pages/Invoices/History.vue -->
+<script setup>
+import AuditTimeline from '@/vendor/audited/AuditTimeline.vue'
+defineProps({ logs: Object })
+</script>
+
+<template>
+  <AuditTimeline :logs="logs" :show-values="true" />
+</template>
+```
+
+### Component props reference
+
+**AuditLogTable.vue**
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `logs` | `Object\|null` | `null` | Paginator from `auditLogProps()`. If null → self-fetch mode |
+| `allActions` | `Array` | `[]` | Action filter options |
+| `allModules` | `Array` | `[]` | Module filter options |
+| `allLevels` | `Array` | `[]` | Level filter options |
+| `filters` | `Object` | `{}` | Initial filter values (Inertia mode) |
+| `endpoint` | `String` | `/audited/api/logs` | API endpoint (self-fetch mode) |
+
+Events: `filter-change(filters)`, `page-change(url)`
+
+**AuditTimeline.vue**
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `logs` | `Object\|Array\|null` | `null` | Paginator or array from `auditTimelineProps()`. If null → self-fetch mode |
+| `subjectType` | `String` | `null` | Eloquent model class (self-fetch mode) |
+| `subjectId` | `String\|Number` | `null` | Model primary key (self-fetch mode) |
+| `endpoint` | `String` | `/audited/api/timeline` | API endpoint (self-fetch mode) |
+| `showValues` | `Boolean` | `false` | Show before/after diff table |
+| `perPage` | `Number` | `10` | Entries per page (self-fetch mode) |
+
+Events: `page-change(url)`
 
 ---
 

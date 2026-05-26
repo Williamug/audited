@@ -120,4 +120,23 @@ return [
     */
     'silent_failures' => env('AUDIT_SILENT_FAILURES', false),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Vue / Inertia API Routes
+    |--------------------------------------------------------------------------
+    | Set to true (or set AUDIT_API_ROUTES=true in .env) to register the
+    | built-in JSON endpoints used by the Vue components in self-fetch mode.
+    |
+    | Endpoints (relative to api_prefix):
+    |   GET /audited/api/logs      — paginated log table data
+    |   GET /audited/api/timeline  — subject-scoped timeline data
+    |
+    | 'api_prefix'     — URL prefix for both endpoints.
+    | 'api_middleware' — middleware stack applied to both endpoints.
+    |                    Include your auth middleware here.
+    */
+    'api_routes'     => env('AUDIT_API_ROUTES', false),
+    'api_prefix'     => 'audited/api',
+    'api_middleware' => ['web', 'auth'],
+
 ];

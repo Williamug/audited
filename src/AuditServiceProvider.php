@@ -103,13 +103,21 @@ class AuditServiceProvider extends ServiceProvider
 
     private function registerLivewireComponents(): void
     {
-        if (class_exists(\Livewire\Livewire::class)) {
-            \Livewire\Livewire::component('audited::timeline', AuditTimeline::class);
-            \Livewire\Livewire::component('audited::log-table', AuditLogTable::class);
-        } elseif (class_exists(\Livewire\Facades\Livewire::class)) {
-            \Livewire\Facades\Livewire::component('audited::timeline', AuditTimeline::class);
-            \Livewire\Facades\Livewire::component('audited::log-table', AuditLogTable::class);
+        $livewire = match (true) {
+            class_exists(\Livewire\Livewire::class)        => \Livewire\Livewire::class,
+            class_exists(\Livewire\Facades\Livewire::class) => \Livewire\Facades\Livewire::class,
+            default                                         => null,
+        };
+
+        if ($livewire === null) {
+            return;
         }
+
+        // Dot notation works in both Livewire v3 and v4.
+        // The :: syntax triggers v4's namespace resolver which ignores explicit
+        // component() registrations, making audited::* unreachable in v4.
+        $livewire::component('audited.log-table', AuditLogTable::class);
+        $livewire::component('audited.timeline', AuditTimeline::class);
     }
 
     private function registerApiRoutes(): void

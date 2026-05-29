@@ -190,8 +190,8 @@ class InstallAudit extends Command
         $this->line('  3. Add <fg=yellow>use Auditable;</> to any model you want to track.');
 
         if ($hasLivewire) {
-            $this->line('  4. Drop <fg=yellow><livewire:audited::log-table /></> on your admin audit page — works immediately, no publishing required.');
-            $this->line('     Drop <fg=yellow><livewire:audited::timeline :subject="$model" /></> on any detail page.');
+            $this->line('  4. Drop <fg=yellow><livewire:audited.log-table /></> on your admin audit page — works immediately, no publishing required.');
+            $this->line('     Drop <fg=yellow><livewire:audited.timeline :subject="$model" /></> on any detail page.');
         } elseif ($hasVue && $hasInertia) {
             $this->line('  4. Use the <fg=yellow>ServesAuditLogs</> trait in your Inertia controller.');
             $this->line('     Import <fg=yellow>AuditLogTable</> and <fg=yellow>AuditTimeline</> from resources/js/vendor/audited/.');

@@ -758,7 +758,7 @@ $log->subject;
 
 The package ships with two ready-made viewer components:
 
-- **Global audit log table** — `<livewire:audited::log-table />` — an admin dashboard showing all entries across the entire application, with live search, filters, and expandable detail rows.
+- **Global audit log table** — `<livewire:audited.log-table />` — an admin dashboard showing all entries across the entire application, with live search, filters, and expandable detail rows.
 - **Per-model timeline** — `<x-audited::timeline :subject="$model" />` — a scoped history viewer for a single record, shown inline on a show/detail page.
 
 ---
@@ -768,7 +768,7 @@ The package ships with two ready-made viewer components:
 A full-featured, live-filtered table for an audit log admin page. Drop one tag and it works:
 
 ```blade
-<livewire:audited::log-table />
+<livewire:audited.log-table />
 ```
 
 That single tag renders:
@@ -787,7 +787,7 @@ That single tag renders:
 {{-- Audit log admin page --}}
 <div class="max-w-7xl mx-auto px-4 py-8">
     <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-6">Audit Log</h1>
-    <livewire:audited::log-table />
+    <livewire:audited.log-table />
 </div>
 ```
 
@@ -837,9 +837,9 @@ Each rendered entry includes:
 If your application uses Livewire 3 or 4, a live-paginated version is available:
 
 ```blade
-<livewire:audited::timeline :subject="$invoice" />
+<livewire:audited.timeline :subject="$invoice" />
 
-<livewire:audited::timeline :subject="$invoice" :per-page="20" :show-values="true" />
+<livewire:audited.timeline :subject="$invoice" :per-page="20" :show-values="true" />
 ```
 
 | Prop | Type | Default | Description |
@@ -881,7 +881,7 @@ Without this, the audit views will render with no styling in any environment whe
 
 Every meaningful element in the package views has a semantic `audited-*` CSS class alongside the Tailwind utilities. You can target these with plain CSS in your own stylesheet — **no need to publish the views**.
 
-**Timeline components (`<x-audited::timeline>` and `<livewire:audited::timeline>`):**
+**Timeline components (`<x-audited::timeline>` and `<livewire:audited.timeline>`):**
 
 | Class | Element |
 |---|---|
@@ -900,7 +900,7 @@ Every meaningful element in the package views has a semantic `audited-*` CSS cla
 | `audited-values-diff-after` | New value cell |
 | `audited-timestamp` | `<time>` element |
 
-**Log table (`<livewire:audited::log-table>`):**
+**Log table (`<livewire:audited.log-table>`):**
 
 | Class | Element |
 |---|---|
@@ -1639,7 +1639,7 @@ class SendOverdueRemindersJob implements ShouldQueue
         <x-audited::timeline :subject="$invoice" :show-values="true" />
 
         {{-- Or live-paginated if Livewire is installed --}}
-        {{-- <livewire:audited::timeline :subject="$invoice" :per-page="15" :show-values="true" /> --}}
+        {{-- <livewire:audited.timeline :subject="$invoice" :per-page="15" :show-values="true" /> --}}
     </div>
 </section>
 ```

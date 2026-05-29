@@ -83,6 +83,13 @@
             </td>
           </tr>
 
+          <!-- Error state -->
+          <tr v-else-if="fetchError">
+            <td colspan="10" class="px-4 py-10 text-center text-sm text-red-500 dark:text-red-400">
+              Failed to load audit logs ({{ fetchError }}). Check that <code>AUDIT_API_ROUTES=true</code> is set.
+            </td>
+          </tr>
+
           <!-- Empty state -->
           <tr v-else-if="!rows.length">
             <td colspan="10" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -278,6 +285,7 @@ const fetchedActions = ref([])
 const fetchedModules = ref([])
 const fetchedLevels  = ref([])
 const loading        = ref(false)
+const fetchError     = ref(null)
 
 const search          = ref(props.filters?.search   ?? '')
 const selectedAction  = ref(props.filters?.action   ?? '')
@@ -346,6 +354,7 @@ function clearFilters() {
 
 async function doFetch(page = 1) {
   loading.value = true
+  fetchError.value = null
   const params = new URLSearchParams({ ...currentFilters.value, perPage: 15, page })
   try {
     const res = await fetch(`${props.endpoint}?${params}`, {
@@ -358,6 +367,8 @@ async function doFetch(page = 1) {
     fetchedActions.value = data.allActions ?? []
     fetchedModules.value = data.allModules ?? []
     fetchedLevels.value  = data.allLevels  ?? []
+  } catch (err) {
+    fetchError.value = err.message
   } finally {
     loading.value = false
   }

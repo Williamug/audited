@@ -72,7 +72,7 @@ class InstallAudit extends Command
     {
         $stack = [];
 
-        if (class_exists(\Livewire\Livewire::class)) {
+        if (class_exists(\Livewire\Livewire::class) || class_exists(\Livewire\Facades\Livewire::class)) {
             $stack[] = 'livewire';
         }
 

@@ -103,12 +103,13 @@ class AuditServiceProvider extends ServiceProvider
 
     private function registerLivewireComponents(): void
     {
-        if (! class_exists(\Livewire\Livewire::class)) {
-            return;
+        if (class_exists(\Livewire\Livewire::class)) {
+            \Livewire\Livewire::component('audited::timeline', AuditTimeline::class);
+            \Livewire\Livewire::component('audited::log-table', AuditLogTable::class);
+        } elseif (class_exists(\Livewire\Facades\Livewire::class)) {
+            \Livewire\Facades\Livewire::component('audited::timeline', AuditTimeline::class);
+            \Livewire\Facades\Livewire::component('audited::log-table', AuditLogTable::class);
         }
-
-        \Livewire\Livewire::component('audited::timeline', AuditTimeline::class);
-        \Livewire\Livewire::component('audited::log-table', AuditLogTable::class);
     }
 
     private function registerApiRoutes(): void

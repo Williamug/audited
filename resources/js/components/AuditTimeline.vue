@@ -4,6 +4,11 @@
     <!-- Loading -->
     <p v-if="loading" class="text-sm text-gray-400 dark:text-gray-500">Loading…</p>
 
+    <!-- Error -->
+    <p v-else-if="fetchError" class="audited-timeline-error text-sm text-red-500 dark:text-red-400">
+      Failed to load timeline ({{ fetchError }}). Check that <code>AUDIT_API_ROUTES=true</code> is set.
+    </p>
+
     <!-- Empty -->
     <p v-else-if="!rows.length" class="audited-timeline-empty text-sm text-gray-500 dark:text-gray-400">
       No audit history found.
@@ -131,6 +136,7 @@ const emit = defineEmits(['page-change'])
 const selfFetch   = computed(() => props.logs === null && props.subjectType !== null)
 const fetchedData = ref(null)
 const loading     = ref(false)
+const fetchError  = ref(null)
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 
@@ -173,6 +179,7 @@ function formatAbsolute(ts) {
 
 async function doFetch(page = 1) {
   loading.value = true
+  fetchError.value = null
   const params = new URLSearchParams({
     subject_type: props.subjectType,
     subject_id:   props.subjectId,
@@ -187,6 +194,8 @@ async function doFetch(page = 1) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     fetchedData.value = data.logs
+  } catch (err) {
+    fetchError.value = err.message
   } finally {
     loading.value = false
   }
